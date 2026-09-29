@@ -34,3 +34,15 @@
 {"q": "What is the price of the LR-200 if I buy it outright?", "source": null, "page": null, "expect": []}
 {"q": "Is there a mobile app to control the robot?", "source": null, "page": null, "expect": []}
 {"q": "How do I reset my Wi-Fi router?", "source": null, "page": null, "expect": []}
+{"q": "How many vacation days do Larkspur Home Robotics employees get per year?", "source": "employee-handbook.pdf", "page": 2, "expect": ["22"]}
+{"q": "What is the runtime of the LR-200 on a full charge?", "source": "lr200-technical-manual.pdf", "page": 1, "expect": ["3.5 hours"]}
+{"q": "How much does Brightwater Retail Group pay for each robot per month?", "source": "services-agreement.pdf", "page": 2, "expect": ["145 USD"]}
+{"q": "Under the Master Services Agreement, what availability does the provider guarantee?", "source": "services-agreement.pdf", "page": 2, "expect": ["98.5 percent"]}
+{"q": "What does error E02 on the LR-200 mean?", "source": "lr200-technical-manual.pdf", "page": 2, "expect": ["Recovery tank full"]}
+{"q": "Where is Larkspur Home Robotics headquartered?", "source": "", "page": 0, "expect": []}
+{"q": "What colors is the LR-200 available in?", "source": "", "page": 0, "expect": []}
+{"q": "How many stores does Brightwater Retail Group have?", "source": "", "page": 0, "expect": []}
+{"q": "When was Larkspur Home Robotics founded?", "source": "", "page": 0, "expect": []}
+{"q": "What is the annual revenue of Larkspur Home Robotics?", "source": "", "page": 0, "expect": []}
+{"q": "Is there a company gym or fitness allowance?", "source": "", "page": 0, "expect": []}
+{"q": "What is the LR-200?", "source": "lr200-technical-manual.pdf", "page": 1, "expect": ["floor-cleaning robot"]}

@@ -1,45 +1,51 @@
 # Evaluation
 
-Corpus: 3 sample PDFs (9 pages). 30 answerable questions, phrased differently from the documents, and 6 questions the documents do not cover.
+Corpus: 3 sample PDFs (9 pages). 36 answerable questions, phrased differently from the documents, and 12 questions the documents do not cover.
 
 ## Retrieval (right document and right page)
 
 | method | hit@1 | hit@3 | MRR@5 |
 |---|---|---|---|
-| bm25 | 93% (28/30) | 100% (30/30) | 0.961 |
-| dense | 93% (28/30) | 100% (30/30) | 0.961 |
-| hybrid (BM25 + dense, RRF) | 93% (28/30) | 100% (30/30) | 0.967 |
-| hybrid + reranker (default) | 100% (30/30) | 100% (30/30) | 1.000 |
+| bm25 | 89% (32/36) | 97% (35/36) | 0.928 |
+| dense | 94% (34/36) | 100% (36/36) | 0.968 |
+| hybrid (BM25 + dense, RRF) | 92% (33/36) | 100% (36/36) | 0.958 |
+| hybrid + reranker (default) | 100% (36/36) | 100% (36/36) | 1.000 |
 
 ## Relevance gate
 
-If the best chunk's reranker score is below the threshold, the answer is "I couldn't find this in the documents" and no model is called.
+If the best chunk's reranker score is below the threshold, the answer is "I couldn't find this in the documents" and no model is called. When the question names something that appears all over the documents (the company, the product), the best chunk is scored again with that name masked, and the lower score counts: a name found everywhere is not evidence that the fact is there.
 
 | threshold | answerable kept | out-of-scope refused |
 |---|---|---|
-| -7.0 | 30/30 | 3/6 |
-| -6.0 | 30/30 | 4/6 |
-| -5.0 ← default | 30/30 | 4/6 |
-| -4.0 | 29/30 | 4/6 |
-| -3.0 | 27/30 | 5/6 |
-| -2.0 | 23/30 | 5/6 |
+| -7.0 | 36/36 | 5/12 |
+| -6.0 | 36/36 | 10/12 |
+| -5.0 ← default | 36/36 | 11/12 |
+| -4.0 | 35/36 | 11/12 |
+| -3.0 | 33/36 | 12/12 |
+| -2.0 | 28/36 | 12/12 |
 
-Out-of-scope questions and their best score:
+Out-of-scope questions and their gate score (with the name masked, when there is one):
 
 - What is the capital of France? → -7.00
-- Who is the CEO of Larkspur Home Robotics? → -3.06
+- Who is the CEO of Larkspur Home Robotics? → -3.06, masked -7.46
 - Does the company offer a pension or 401k plan? → -7.32
-- What is the price of the LR-200 if I buy it outright? → -0.99
+- What is the price of the LR-200 if I buy it outright? → -0.99, masked -5.75
 - Is there a mobile app to control the robot? → -6.06
 - How do I reset my Wi-Fi router? → -7.07
+- Where is Larkspur Home Robotics headquartered? → -0.28, masked -6.12
+- What colors is the LR-200 available in? → -1.21, masked -9.82
+- How many stores does Brightwater Retail Group have? → -0.08, masked -3.88
+- When was Larkspur Home Robotics founded? → 1.88, masked -6.16
+- What is the annual revenue of Larkspur Home Robotics? → -3.59, masked -6.90
+- Is there a company gym or fitness allowance? → -6.28
 
-Lowest score of an answerable question: -4.32.
+Lowest gate score of an answerable question: -4.32.
 
 ## Answers (extractive mode, no LLM)
 
-- Expected facts present in the answer: **28/30**
-- Answer cites the right document and page: **30/30**
-- Out-of-scope questions refused: **4/6**
+- Expected facts present in the answer: **34/36**
+- Answer cites the right document and page: **36/36**
+- Out-of-scope questions refused: **11/12**
 
 Answers that missed an expected fact:
 

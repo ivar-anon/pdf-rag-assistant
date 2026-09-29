@@ -97,3 +97,48 @@ def test_llm_not_called_when_gate_refuses(sample_pdfs):
     r, fake = llm_rag(sample_pdfs, "should not be used [1]")
     r.ask("What is the capital of France?")
     assert fake.calls == []
+
+
+# --- answerability (QA report D-1, D-2) and headings in answers (D-5) ----------------
+
+from rag.answer import _units  # noqa: E402
+from rag.names import frequent_names, mask_names  # noqa: E402
+
+
+def test_frequent_names_and_masking():
+    texts = [f"Larkspur Home Robotics note {i} about the LR-200." for i in range(4)] + ["unrelated text"] * 4
+    names = frequent_names(texts)
+    assert names == ["Larkspur Home Robotics", "LR-200"]
+    assert mask_names("Who is the CEO of Larkspur Home Robotics?", names) == "Who is the CEO of it?"
+    assert mask_names("How long is the LR-200's warranty?", names) == "How long is its warranty?"
+    assert mask_names("What is the LR-200?", names) == "What is the LR-200?"  # a question about the name itself
+
+
+def test_gate_refuses_question_matched_only_by_the_company_name(rag):  # D-1
+    a = rag.ask("Who is the CEO of Larkspur Home Robotics?")
+    assert not a["found"] and a["text"] == NOT_FOUND
+    assert a["gate_question"] == "Who is the CEO of it?"
+
+
+def test_gate_refuses_a_price_the_documents_do_not_give(rag):  # D-2
+    a = rag.ask("What is the price of the LR-200 if I buy it outright?")
+    assert not a["found"] and a["citations"] == []
+
+
+def test_named_question_with_evidence_is_still_answered(rag):
+    a = rag.ask("What is the runtime of the LR-200 per charge?")
+    assert a["found"] and a["gate_question"] == "What is the runtime of it per charge?"
+    assert (a["citations"][0]["source"], a["citations"][0]["page"]) == ("lr200-technical-manual.pdf", 1)
+
+
+def test_units_skip_title_and_headings():
+    text = "Acme Services Agreement — Acme and Beta\n\n1. Overview\nThe LR-200 is a floor robot for shops of any size."
+    assert _units(text, title="Acme Services Agreement — Acme and Beta") == [
+        "The LR-200 is a floor robot for shops of any size."]
+
+
+def test_no_heading_or_title_can_become_an_answer(rag):  # D-5
+    for c in rag.retriever._chunks:
+        for u in _units(c["text"], c["doc_title"]):
+            assert c["doc_title"] not in u
+            assert not u.startswith(("About this handbook", "Overview ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. "))

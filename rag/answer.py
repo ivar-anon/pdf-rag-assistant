@@ -70,7 +70,7 @@ class LLMAnswerer:
             client = OpenAI(api_key=api_key)
         self.client, self.model = client, model
 
-    def answer(self, question: str, hits) -> Answer:
+    def answer(self, question: str, hits, gate_question: str | None = None) -> Answer:
         user = f"Excerpts:\n\n{format_context(hits)}\n\nQuestion: {question}"
         resp = self.client.responses.create(model=self.model, instructions=SYSTEM_PROMPT, input=user)
         text = (resp.output_text or "").strip()
@@ -85,13 +85,18 @@ class LLMAnswerer:
 
 
 HEADING_RE = re.compile(r"^(\d+(\.\d+)*\.?\s+)?[A-Z][^.!?]{0,60}$")
+SENTENCE_END = re.compile(r"[.!?][\"')\]”’]*$")
 
 
-def _units(text: str) -> list[str]:
-    """Answerable units: sentences, and table rows labelled with their header."""
+def _units(text: str, title: str | None = None) -> list[str]:
+    """Answerable units: sentences, and table rows labelled with their header.
+
+    Headings, the document title and other lines that are not sentences (no final
+    punctuation) are never units, so they cannot turn up as an answer.
+    """
     out = []
     for block in text.split("\n\n"):
-        lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
+        lines = [ln.strip() for ln in block.splitlines() if ln.strip() and ln.strip() != title]
         rows = [ln for ln in lines if "|" in ln]
         if rows:
             header = [h.strip() for h in rows[0].split("|")]
@@ -104,18 +109,21 @@ def _units(text: str) -> list[str]:
             prose = " ".join(ln for ln in lines if "|" not in ln and not HEADING_RE.match(ln))
         else:
             prose = " ".join(ln for ln in lines if not HEADING_RE.match(ln))
-        out += [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", prose) if s.strip()]
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9])", prose) if s.strip()]
+        out += [s for s in sentences if SENTENCE_END.search(s)]
     return [u for u in out if len(u) > 25]
 
 
 class ExtractiveAnswerer:
     mode = "extractive"
 
-    def __init__(self, embedder, reranker=None, max_sentences: int = 2, margin: float = 1.5):
+    def __init__(self, embedder, reranker=None, max_sentences: int = 2, margin: float = 1.5,
+                 min_score: float | None = None):
         self.embedder, self.reranker = embedder, reranker
         self.max_sentences, self.margin = max_sentences, margin
+        self.min_score = min_score  # sentence-level answerability threshold (reranker scale)
 
-    def answer(self, question: str, hits) -> Answer:
+    def answer(self, question: str, hits, gate_question: str | None = None) -> Answer:
         cands, seen = [], set()
         top = hits[0].rerank if getattr(hits[0], "rerank", None) is not None else None
         prior = {}
@@ -126,7 +134,7 @@ class ExtractiveAnswerer:
                 prior[i] = 0.5 * (h.rerank - top)
             else:
                 prior[i] = 0.0
-            for u in _units(h.chunk["text"]):
+            for u in _units(h.chunk["text"], h.chunk.get("doc_title")):
                 if u not in seen:  # overlapping chunks repeat text; keep the first citation
                     seen.add(u)
                     cands.append((i, u))
@@ -135,6 +143,11 @@ class ExtractiveAnswerer:
         if self.reranker is not None:
             # the cross-encoder reads question and sentence together: best signal available offline
             scores = self.reranker.scores(question, [u for _, u in cands])
+            if gate_question and gate_question != question and self.min_score is not None:
+                # answerability: with corpus-wide names masked, some sentence must still be relevant
+                masked = self.reranker.scores(gate_question, [u for _, u in cands])
+                if max(masked) < self.min_score:
+                    return Answer(NOT_FOUND, False, self.mode)
             scored = [(sc + prior[i], i, u) for sc, (i, u) in zip(scores, cands)]
             margin = self.margin
         else:

@@ -15,6 +15,17 @@ from pypdf import PdfReader
 
 FOOTER_RE = re.compile(r"^.{0,120}(?:—|-)\s*page\s+\d+\s*$", re.I)
 COLUMN_GAP = re.compile(r"\S {3,}\S")
+NUMBERED_HEADING = re.compile(r"^\d+(\.\d+)*\.?\s+[A-Z][^.!?:;]{0,70}$")
+
+
+def _is_heading_line(line: str, next_line: str) -> bool:
+    """A numbered or Title Case line that starts a block right before a new sentence."""
+    if not next_line[:1].isupper() or len(line) >= 60 or line[-1:] in ".:;,!?":
+        return False
+    if NUMBERED_HEADING.match(line):
+        return True
+    words = [w for w in re.findall(r"[A-Za-z][\w'-]*", line)]
+    return len(words) >= 2 and sum(w[0].isupper() for w in words) / len(words) >= 0.6
 
 
 @dataclass
@@ -50,7 +61,12 @@ def _blocks(layout_text: str) -> list[str]:
             rows = [re.sub(r" {3,}", " | ", ln.strip()) for ln in b]
             out.append("\n".join(rows))
         else:
-            out.append(re.sub(r"\s+", " ", " ".join(ln.strip() for ln in b)).strip())
+            lines = [ln.strip() for ln in b]
+            # a heading printed right above its paragraph, with no blank line in between
+            if len(lines) >= 2 and _is_heading_line(lines[0], lines[1]):
+                out.append(lines[0])
+                lines = lines[1:]
+            out.append(re.sub(r"\s+", " ", " ".join(lines)).strip())
     return [b for b in out if b]
 
 
@@ -91,7 +107,7 @@ def chunk_pages(pages: list[str], *, doc_id: str, doc_title: str, source: str,
         carry = ""
         for b in blocks:
             if len(b) < 60 and not b.endswith(".") and "|" not in b:
-                carry = (carry + " " + b).strip()
+                carry = (carry + "\n" + b).strip()  # one heading per line, so answers can skip them
                 continue
             merged.append((carry + "\n" + b).strip() if carry else b)
             carry = ""

@@ -10,6 +10,7 @@ from .answer import NOT_FOUND, Answer, ExtractiveAnswerer, LLMAnswerer
 from .config import Settings, get_settings
 from .embeddings import FastEmbedEmbedder
 from .ingest import doc_id_for, ingest_pdf
+from .names import frequent_names, mask_names
 from .rerank import CrossEncoderReranker
 from .retrieve import HybridRetriever
 from .store import QdrantStore
@@ -39,7 +40,8 @@ class RAGPipeline:
         elif self.s.openai_api_key:
             self.answerer = LLMAnswerer(self.s.openai_api_key, self.s.openai_model)
         else:
-            self.answerer = ExtractiveAnswerer(self.embedder, self.reranker)
+            self.answerer = ExtractiveAnswerer(self.embedder, self.reranker, min_score=self.s.min_rerank)
+        self._refresh_names()
 
     # ---- documents -------------------------------------------------------------
     def add_pdf(self, path: str | Path) -> dict:
@@ -51,6 +53,7 @@ class RAGPipeline:
         vectors = self.embedder.embed_documents([f"{c.doc_title}\n{c.text}" for c in chunks])
         self.store.upsert(chunks, vectors)
         self.retriever.refresh()
+        self._refresh_names()
         return {"doc_id": doc_id, "title": chunks[0].doc_title, "source": chunks[0].source,
                 "pages": max(c.page for c in chunks), "chunks": len(chunks)}
 
@@ -66,6 +69,14 @@ class RAGPipeline:
     def remove(self, doc_id: str) -> None:
         self.store.delete_document(doc_id)
         self.retriever.refresh()
+        self._refresh_names()
+
+    def _refresh_names(self) -> None:
+        self.frequent_names = frequent_names([c["text"] + "\n" + c["doc_title"] for c in self.retriever._chunks])
+
+    def gate_question(self, question: str) -> str:
+        """The question with corpus-wide names masked (see rag/names.py); unchanged if it has none."""
+        return mask_names(question, self.frequent_names)
 
     # ---- questions -----------------------------------------------------------------
     def ask(self, question: str, doc_ids: list[str] | None = None, k: int | None = None) -> dict:
@@ -77,15 +88,22 @@ class RAGPipeline:
                 h.rerank = sc
             hits = sorted(hits, key=lambda h: h.rerank, reverse=True)[:k]
             covered = bool(hits) and hits[0].rerank >= self.s.min_rerank
+            gate_q = self.gate_question(question)
+            if covered and gate_q != question:
+                # relevance that only comes from a name found all over the corpus is not evidence
+                masked = self.reranker.scores(gate_q, [h.chunk["text"] for h in hits])
+                covered = max(masked) >= self.s.min_rerank
         else:
             hits = self.retriever.search(question, k, "hybrid", doc_ids)
             covered = bool(hits) and max((h.dense or 0.0) for h in hits) >= self.s.min_relevance
+            gate_q = question  # the name-masked check needs the reranker
         if not covered:
             ans = Answer(NOT_FOUND, False, "gate")
         else:
-            ans = self.answerer.answer(question, hits)
+            ans = self.answerer.answer(question, hits, gate_question=gate_q)
         return {
             "question": question,
+            "gate_question": gate_q if gate_q != question else None,
             **asdict(ans),
             "retrieval": [{"chunk_id": h.chunk["chunk_id"], "source": h.chunk["source"], "page": h.chunk["page"],
                            "fused": round(h.score, 4), "dense": None if h.dense is None else round(h.dense, 4),

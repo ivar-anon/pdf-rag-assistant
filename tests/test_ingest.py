@@ -41,3 +41,20 @@ def test_every_sample_pdf_yields_chunks(sample_pdfs):
         chunks = ingest_pdf(p)
         assert chunks and all(ch.text.strip() for ch in chunks)
         assert max(ch.page for ch in chunks) == 3
+
+
+def test_headings_stay_on_their_own_line():
+    pages = ["Acme Handbook\n\n1. About this handbook\n\nThis handbook applies to every employee of Acme Corp and explains the rules."]
+    c = chunk_pages(pages, doc_id="d", doc_title="Acme Handbook", source="a.pdf", max_chars=600)
+    assert c[0].text.splitlines() == ["Acme Handbook", "1. About this handbook",
+                                      "This handbook applies to every employee of Acme Corp and explains the rules."]
+
+
+def test_heading_without_blank_line_is_split_from_its_paragraph():
+    raw = "  2. Term and renewal\n  The Agreement starts on the effective date and runs for twelve months.\n"
+    assert _blocks(raw) == ["2. Term and renewal", "The Agreement starts on the effective date and runs for twelve months."]
+
+
+def test_wrapped_line_before_a_name_is_not_taken_for_a_heading():
+    raw = "  Questions about any policy should go to the\n  People Operations team at the help desk.\n"
+    assert _blocks(raw) == ["Questions about any policy should go to the People Operations team at the help desk."]

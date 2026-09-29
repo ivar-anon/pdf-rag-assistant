@@ -65,20 +65,31 @@ def main() -> None:
         n = len(answerable)
         lines.append(f"| {method} | {h1/n:.0%} ({h1}/{n}) | {h3/n:.0%} ({h3}/{n}) | {mrr/n:.3f} |")
 
-    # relevance gate: the reranker score of the best chunk
-    best = {q["q"]: reranked(q["q"], 1)[0].rerank for q in QUESTIONS}
+    # relevance gate: the reranker score of the best chunk, and of the best chunk again with
+    # corpus-wide names masked (rag/names.py); the gate uses the lower of the two
+    best, masked_best = {}, {}
+    for q in QUESTIONS:
+        top = reranked(q["q"], rag.s.top_k)
+        best[q["q"]] = top[0].rerank
+        gq = rag.gate_question(q["q"])
+        if gq != q["q"]:
+            masked_best[q["q"]] = max(rag.reranker.scores(gq, [h.chunk["text"] for h in top]))
+    gate = {qq: min(sc, masked_best.get(qq, sc)) for qq, sc in best.items()}
     lines += ["", "## Relevance gate", "",
               "If the best chunk's reranker score is below the threshold, the answer is \"I couldn't find this in the "
-              "documents\" and no model is called.", "",
+              "documents\" and no model is called. When the question names something that appears all over the "
+              "documents (the company, the product), the best chunk is scored again with that name masked, and the "
+              "lower score counts: a name found everywhere is not evidence that the fact is there.", "",
               "| threshold | answerable kept | out-of-scope refused |", "|---|---|---|"]
     for t in (-7.0, -6.0, -5.0, -4.0, -3.0, -2.0):
-        kept = sum(best[q["q"]] >= t for q in answerable)
-        refused = sum(best[q["q"]] < t for q in unanswerable)
+        kept = sum(gate[q["q"]] >= t for q in answerable)
+        refused = sum(gate[q["q"]] < t for q in unanswerable)
         mark = " ← default" if abs(t - rag.s.min_rerank) < 1e-9 else ""
         lines.append(f"| {t:.1f}{mark} | {kept}/{len(answerable)} | {refused}/{len(unanswerable)} |")
-    lines += ["", "Out-of-scope questions and their best score:", ""]
-    lines += [f"- {q['q']} → {best[q['q']]:.2f}" for q in unanswerable]
-    lines += ["", f"Lowest score of an answerable question: {min(best[q['q']] for q in answerable):.2f}.", ""]
+    lines += ["", "Out-of-scope questions and their gate score (with the name masked, when there is one):", ""]
+    lines += [f"- {q['q']} → {best[q['q']]:.2f}" + (f", masked {masked_best[q['q']]:.2f}" if q["q"] in masked_best else "")
+              for q in unanswerable]
+    lines += ["", f"Lowest gate score of an answerable question: {min(gate[q['q']] for q in answerable):.2f}.", ""]
 
     # end-to-end answers (extractive mode: no API key)
     correct, cited_right, wrong = 0, 0, []

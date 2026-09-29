@@ -10,7 +10,7 @@ Ask questions about your PDFs and get answers that come **only** from the docume
 - **Runs without an API key:** extractive mode quotes the best sentences or table rows, with the same citations.
 - **Tables survive extraction.** Rows are rebuilt as `Code | Meaning | Action`, so a question about error E07 finds that row.
 - **Measured:** an evaluation set of 36 questions, reported per retrieval method (below).
-- **FastAPI backend, a small web UI, Docker, 29 tests and CI.**
+- **FastAPI backend, a small web UI, Docker, 38 tests and CI.**
 
 ## Quick start
 
@@ -51,23 +51,25 @@ flowchart LR
 ```
 
 1. **Extraction** (`rag/ingest.py`): pypdf in layout mode. Hard-wrapped lines are joined back into paragraphs, and table rows are kept as rows. Page footers are dropped.
-2. **Chunking**: paragraphs are packed into chunks of about 600 characters. A heading stays with its paragraph, one block overlaps between neighbouring chunks, and no chunk crosses a page, so every citation points to one page.
+2. **Chunking**: paragraphs are packed into chunks of about 600 characters. A heading stays with its paragraph (on its own line, so it never ends up inside an answer), one block overlaps between neighbouring chunks, and no chunk crosses a page, so every citation points to one page.
 3. **Retrieval** (`rag/retrieve.py`): dense search in Qdrant (embedded by default, or a server via `QDRANT_URL`) and BM25, combined with RRF. BM25 catches exact codes, numbers and names; vectors catch paraphrases.
-4. **Reranking and gate** (`rag/rerank.py`): a cross-encoder reads the question and each candidate together. If the best score is below `RAG_MIN_RERANK`, the app refuses without calling the LLM.
+4. **Reranking and gate** (`rag/rerank.py`): a cross-encoder reads the question and each candidate together. If the best score is below `RAG_MIN_RERANK`, the app refuses without calling the LLM. Names that appear all over the corpus (the company, the product) are not evidence: when the question contains one, the candidates are scored again with the name masked (`rag/names.py`), and that score has to clear the gate too. "Who is the CEO of Larkspur Home Robotics?" matches half the documents on the company name, but "Who is the CEO of it?" matches nothing.
 5. **Answer** (`rag/answer.py`): the model sees numbered excerpts with document and page, and must cite them as `[1]`. Citations to excerpts that don't exist are removed, and an answer with no citation is flagged instead of being presented as grounded.
 
 ## Evaluation
 
-`python eval/run_eval.py` runs 30 answerable questions, worded differently from the documents, plus 6 questions the documents don't cover. A hit means the right document **and** the right page. Full output is in [eval/results.md](eval/results.md).
+`python eval/run_eval.py` runs 36 answerable questions, worded differently from the documents, plus 12 questions the documents don't cover. A hit means the right document **and** the right page. Full output is in [eval/results.md](eval/results.md).
 
 | retrieval | hit@1 | hit@3 | MRR@5 |
 |---|---|---|---|
-| BM25 | 93% | 100% | 0.961 |
-| dense | 93% | 100% | 0.961 |
-| hybrid (RRF) | 93% | 100% | 0.967 |
+| BM25 | 89% | 97% | 0.928 |
+| dense | 94% | 100% | 0.968 |
+| hybrid (RRF) | 92% | 100% | 0.958 |
 | **hybrid + reranker** | **100%** | **100%** | **1.000** |
 
-In extractive mode (no LLM), 28/30 answers contain the expected fact and 30/30 cite the right page. The relevance gate refuses 4 of the 6 out-of-scope questions while keeping all 30 answerable ones. The two it lets through ("Who is the CEO?", "What does the robot cost to buy?") land on passages that mention the company or prices. In LLM mode those are handled by the instruction to answer only from the excerpts, which extractive mode cannot do.
+In extractive mode (no LLM), 34/36 answers contain the expected fact and 36/36 cite the right page. The relevance gate refuses 11 of the 12 out-of-scope questions while keeping all 36 answerable ones. The one it lets through ("How many stores does Brightwater Retail Group have?") lands on a sentence about the stores listed in each statement of work; the LLM mode handles that one through its instruction to answer only from the excerpts.
+
+The first version refused 4 of 6. A QA pass on it (see [QA history](#qa-history)) found two out-of-scope questions answered with unrelated text (the company's CEO, the robot's purchase price) and section headings leaking into answers. The name-masked gate and the heading fix came out of it. Twelve questions were added after the fix, six out-of-scope (five of them name the company or the product) and six answerable ones that name them, to check that it isn't tuned to the two that failed; the threshold stayed at -5.0.
 
 ## API
 
@@ -112,7 +114,7 @@ rag/          ingest · embeddings · store (Qdrant) · bm25 · retrieve · rera
 app/          FastAPI app and the single-page UI
 eval/         questions.jsonl, run_eval.py, results.md
 sample_docs/  generator for the sample PDFs (a fictional company) and the PDFs themselves
-tests/        29 tests (ingest, retrieval, gate, LLM contract with a mocked client, API)
+tests/        38 tests (ingest, retrieval, gate, answerability, LLM contract with a mocked client, API)
 ```
 
 ## Limits and next steps
@@ -122,6 +124,11 @@ tests/        29 tests (ingest, retrieval, gate, LLM contract with a mocked clie
 - Single-tenant: there is no login or per-user document separation. Qdrant payload filters by user or workspace are the natural extension.
 - The reranker runs on CPU (about 1.5 s per question). A GPU, a smaller reranker or reranking fewer candidates bring that down.
 - The sample corpus is small and synthetic. On a real corpus, re-run the evaluation with your own questions and tune `RAG_MIN_RERANK` from the table it prints.
+- Extractive mode can put the right page's second-best sentence first (for example the late-payment and uptime questions in the evaluation). An LLM, or a sentence-level answer check, fixes that.
+
+## QA history
+
+- **29 Sep 2026, QA report on the first version:** 6 defects. Fixed: D-1 and D-2 (out-of-scope questions answered because they named the company or the product) with the name-masked relevance gate, and D-5 (section headings and the document title showing up in answers). Still open: D-3 and D-4 (right page, wrong sentence first in extractive mode) and D-6 (1–2 s per question on CPU). Each fix has a regression test in `tests/`.
 
 ## License
 
