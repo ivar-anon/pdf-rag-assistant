@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF RAG Assistant</title>
+<style>
+:root{--bg:#f6f5f2;--panel:#fff;--ink:#1d1d1f;--muted:#6b6b70;--line:#e4e2dc;--accent:#2f5d50;--accent-soft:#e7efe9;--warn:#8a5a00;--warn-soft:#fbf1dc;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#121212;--panel:#1b1b1d;--ink:#ececec;--muted:#9a9aa0;--line:#2c2c30;--accent:#7cc1a6;--accent-soft:#1f2b26;--warn:#f0c46a;--warn-soft:#2c2415}}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:300px 1fr}
+aside{border-right:1px solid var(--line);background:var(--panel);padding:20px;display:flex;flex-direction:column;gap:16px;overflow:auto}
+h1{font-size:17px;margin:0}h1 small{display:block;font-weight:400;color:var(--muted);font-size:12.5px;margin-top:2px}
+.badge{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.badge.warn{background:var(--warn-soft);color:var(--warn)}
+.docs{display:flex;flex-direction:column;gap:6px}
+.doc{border:1px solid var(--line);border-radius:10px;padding:9px 10px;display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;font-size:13px}
+.doc input{margin-top:3px}.doc b{font-weight:600;display:block}.doc span{color:var(--muted);font-size:12px}
+.doc button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+.drop{border:1.5px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:13px;cursor:pointer}
+.drop.over{border-color:var(--accent);color:var(--accent)}
+main{display:flex;flex-direction:column;min-width:0;height:100vh}
+#thread{flex:1;overflow:auto;padding:28px max(24px,calc((100% - 820px)/2))}
+.q{font-weight:600;margin:22px 0 8px}
+.a{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;white-space:pre-wrap}
+.a.nf{color:var(--muted)}
+.cite{display:inline-block;font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:0 5px;margin:0 1px;cursor:pointer}
+.sources{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+details{border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13px}
+summary{cursor:pointer;color:var(--muted)}summary b{color:var(--ink)}
+details pre{white-space:pre-wrap;font:12.5px/1.45 var(--mono);margin:8px 0 4px;color:var(--ink)}
+details a{color:var(--accent);font-size:12.5px}
+.meta{font-size:12px;color:var(--muted);margin-top:6px}
+.empty{color:var(--muted);text-align:center;margin-top:12vh}
+.empty li{list-style:none;margin:6px 0}.empty a{color:var(--accent);cursor:pointer}
+form{display:flex;gap:8px;padding:14px max(24px,calc((100% - 820px)/2)) 22px;border-top:1px solid var(--line);background:var(--bg)}
+textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:12px;padding:11px 13px;font:inherit;background:var(--panel);color:var(--ink);height:48px}
+button.send{border:0;border-radius:12px;padding:0 18px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+button.send:disabled{opacity:.5;cursor:default}
+@media (max-width:760px){body{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line);max-height:38vh}main{height:auto;min-height:62vh}}
+</style>
+</head>
+<body>
+<aside>
+  <div><h1>PDF RAG Assistant<small>Answers only from your documents, with page citations.</small></h1></div>
+  <div id="mode"></div>
+  <div>
+    <div class="meta" style="margin-bottom:6px">Documents — untick to leave one out of the search</div>
+    <div class="docs" id="docs"></div>
+  </div>
+  <label class="drop" id="drop">Drop a PDF here or click to upload<input type="file" id="file" accept="application/pdf" hidden></label>
+  <div class="meta" id="upmsg"></div>
+</aside>
+<main>
+  <div id="thread"><div class="empty" id="empty">
+    <p>Ask a question about the documents. Try:</p>
+    <ul>
+      <li><a>How many vacation days can I carry over?</a></li>
+      <li><a>The robot shows error E07. What should I do?</a></li>
+      <li><a>What happens if availability drops below the SLA?</a></li>
+      <li><a>Is there a mobile app to control the robot?</a></li>
+    </ul></div></div>
+  <form id="f"><textarea id="q" placeholder="Ask about your PDFs…" required></textarea><button class="send" id="send">Ask</button></form>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let docs = [];
+const excluded = new Set();
+
+async function health(){
+  const h = await (await fetch('/api/health')).json();
+  $('#mode').innerHTML = h.mode === 'llm'
+    ? `<span class="badge">Generative · ${esc(h.llm_model)}</span>`
+    : `<span class="badge warn">Extractive mode · no API key</span><div class="meta">Answers quote the documents directly. Set OPENAI_API_KEY for written answers.</div>`;
+  $('#mode').innerHTML += `<div class="meta">${esc(h.vector_store)} · ${esc(h.embedding_model)}${h.reranker ? ' · rerank ' + esc(h.reranker) : ''}</div>`;
+}
+async function loadDocs(){
+  docs = await (await fetch('/api/documents')).json();
+  $('#docs').innerHTML = docs.map(d => `<div class="doc"><input type="checkbox" data-id="${d.doc_id}" ${excluded.has(d.doc_id)?'':'checked'}>
+    <div><b>${esc(d.title)}</b><span>${esc(d.source)} · ${d.pages} pages</span></div>
+    <button title="Remove" data-del="${d.doc_id}">×</button></div>`).join('') || '<div class="meta">No documents yet.</div>';
+}
+$('#docs').addEventListener('change', e => { const id = e.target.dataset.id; e.target.checked ? excluded.delete(id) : excluded.add(id); });
+$('#docs').addEventListener('click', async e => {
+  const id = e.target.dataset.del; if (!id) return;
+  await fetch('/api/documents/' + id, {method:'DELETE'}); excluded.delete(id); loadDocs(); health();
+});
+async function upload(file){
+  $('#upmsg').textContent = `Indexing ${file.name}…`;
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch('/api/documents', {method:'POST', body:fd});
+  const j = await r.json();
+  $('#upmsg').textContent = r.ok ? `Added ${j.source}: ${j.pages} pages, ${j.chunks} chunks.` : (j.detail || 'Upload failed.');
+  loadDocs(); health();
+}
+$('#file').onchange = e => e.target.files[0] && upload(e.target.files[0]);
+const drop = $('#drop');
+['dragover','dragenter'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, () => drop.classList.remove('over')));
+drop.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; f && upload(f); });
+
+function render(res){
+  const box = document.createElement('div');
+  const text = esc(res.text).replace(/\[(\d+)\]/g, (m, n) => `<span class="cite" data-n="${n}">${n}</span>`);
+  const src = (res.citations || []).map(c => `<details id="src-${res._id}-${c.n}"><summary><b>[${c.n}]</b> ${esc(c.doc_title)} — page ${c.page}</summary>
+      <pre>${esc(c.snippet)}${c.snippet.length >= 400 ? '…' : ''}</pre><a href="/api/documents/${c.doc_id}/file#page=${c.page}" target="_blank" rel="noopener">Open the PDF at page ${c.page} ↗</a></details>`).join('');
+  box.innerHTML = `<div class="q">${esc(res.question)}</div><div class="a ${res.found ? '' : 'nf'}">${text}</div>
+    ${src ? `<div class="sources">${src}</div>` : ''}<div class="meta">${res.mode === 'gate' ? 'Not covered by the documents · ' : ''}${res.latency_ms} ms</div>`;
+  box.querySelectorAll('.cite').forEach(el => el.onclick = () => { const d = box.querySelector(`#src-${res._id}-${el.dataset.n}`); if (d) { d.open = true; d.scrollIntoView({behavior:'smooth', block:'nearest'}); } });
+  $('#thread').appendChild(box); box.scrollIntoView({behavior:'smooth', block:'start'});
+}
+let counter = 0;
+async function ask(question){
+  $('#empty')?.remove(); $('#send').disabled = true;
+  const ids = docs.map(d => d.doc_id).filter(id => !excluded.has(id));
+  try {
+    const r = await fetch('/api/ask', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question, doc_ids: ids.length === docs.length ? null : ids})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.detail || 'Request failed');
+    j._id = ++counter; render(j);
+  } catch (e) { render({_id: ++counter, question, text: 'Error: ' + e.message, found: false, citations: [], latency_ms: 0}); }
+  $('#send').disabled = false;
+}
+$('#f').onsubmit = e => { e.preventDefault(); const q = $('#q').value.trim(); if (q.length > 2) { $('#q').value = ''; ask(q); } };
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#f').requestSubmit(); } });
+document.querySelectorAll('.empty a').forEach(a => a.onclick = () => ask(a.textContent));
+health(); loadDocs();
+</script>
+</body>
+</html>

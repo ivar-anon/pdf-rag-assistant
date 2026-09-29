@@ -1,0 +1,36 @@
+{"q": "How many days off per year does a full-time employee get?", "source": "employee-handbook.pdf", "page": 2, "expect": ["22"]}
+{"q": "Can I roll unused vacation into next year?", "source": "employee-handbook.pdf", "page": 2, "expect": ["five", "31 March"]}
+{"q": "How far ahead do I need to ask for a two-week holiday?", "source": "employee-handbook.pdf", "page": 2, "expect": ["30 days"]}
+{"q": "When do I need a doctor's note for being sick?", "source": "employee-handbook.pdf", "page": 2, "expect": ["three consecutive days"]}
+{"q": "How long is parental leave for the main caregiver?", "source": "employee-handbook.pdf", "page": 2, "expect": ["16 weeks"]}
+{"q": "How many days a week can I work from home?", "source": "employee-handbook.pdf", "page": 1, "expect": ["three days"]}
+{"q": "Is there money to set up a home office?", "source": "employee-handbook.pdf", "page": 1, "expect": ["600 USD"]}
+{"q": "What are the core hours when everyone should be available?", "source": "employee-handbook.pdf", "page": 1, "expect": ["10:00", "15:00"]}
+{"q": "When can I fly business class?", "source": "employee-handbook.pdf", "page": 3, "expect": ["8 hours"]}
+{"q": "What is the per diem for food on business trips?", "source": "employee-handbook.pdf", "page": 3, "expect": ["70 USD"]}
+{"q": "Which expenses need my manager's approval first?", "source": "employee-handbook.pdf", "page": 3, "expect": ["250 USD"]}
+{"q": "I lost my work laptop. How quickly must I report it?", "source": "employee-handbook.pdf", "page": 3, "expect": ["one hour"]}
+{"q": "How long does the contract last before it renews?", "source": "services-agreement.pdf", "page": 1, "expect": ["36 months"]}
+{"q": "How much notice is needed to stop the automatic renewal?", "source": "services-agreement.pdf", "page": 1, "expect": ["90 days"]}
+{"q": "What does the customer pay per robot each month?", "source": "services-agreement.pdf", "page": 2, "expect": ["145 USD"]}
+{"q": "What happens if an invoice is paid late?", "source": "services-agreement.pdf", "page": 2, "expect": ["1.5 percent"]}
+{"q": "What uptime does the provider guarantee?", "source": "services-agreement.pdf", "page": 2, "expect": ["98.5"]}
+{"q": "What compensation does the customer get if availability targets are missed?", "source": "services-agreement.pdf", "page": 2, "expect": ["5 percent", "25 percent"]}
+{"q": "Can the customer exit the agreement early, and at what cost?", "source": "services-agreement.pdf", "page": 3, "expect": ["three months"]}
+{"q": "What is the maximum amount either side can be held liable for?", "source": "services-agreement.pdf", "page": 3, "expect": ["12 months"]}
+{"q": "Which state's law applies to the agreement?", "source": "services-agreement.pdf", "page": 3, "expect": ["Oregon"]}
+{"q": "How long do confidentiality obligations last after the contract ends?", "source": "services-agreement.pdf", "page": 3, "expect": ["five years"]}
+{"q": "How heavy is the LR-200?", "source": "lr200-technical-manual.pdf", "page": 1, "expect": ["38 kg"]}
+{"q": "How long does the robot run on one battery charge?", "source": "lr200-technical-manual.pdf", "page": 1, "expect": ["3.5 hours"]}
+{"q": "At what temperatures should the robot not be charged?", "source": "lr200-technical-manual.pdf", "page": 1, "expect": ["5 °C", "40 °C"]}
+{"q": "The display shows E07. What should I do?", "source": "lr200-technical-manual.pdf", "page": 2, "expect": ["30 minutes"]}
+{"q": "What does code E04 mean?", "source": "lr200-technical-manual.pdf", "page": 2, "expect": ["Cliff sensor"]}
+{"q": "The same error keeps coming back during a shift. What now?", "source": "lr200-technical-manual.pdf", "page": 2, "expect": ["support ticket"]}
+{"q": "How often should the brush be replaced?", "source": "lr200-technical-manual.pdf", "page": 3, "expect": ["500"]}
+{"q": "How long is the battery under warranty?", "source": "lr200-technical-manual.pdf", "page": 3, "expect": ["36 months", "1,500"]}
+{"q": "What is the capital of France?", "source": null, "page": null, "expect": []}
+{"q": "Who is the CEO of Larkspur Home Robotics?", "source": null, "page": null, "expect": []}
+{"q": "Does the company offer a pension or 401k plan?", "source": null, "page": null, "expect": []}
+{"q": "What is the price of the LR-200 if I buy it outright?", "source": null, "page": null, "expect": []}
+{"q": "Is there a mobile app to control the robot?", "source": null, "page": null, "expect": []}
+{"q": "How do I reset my Wi-Fi router?", "source": null, "page": null, "expect": []}
